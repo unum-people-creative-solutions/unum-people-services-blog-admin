@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { X, Cookie } from "lucide-react";
 
-const POLITICA_PRIVACIDADE_URL = "https://unumpeople.com.br/termos/5558327c-6ee1-4549-8e1b-dc03fdae516a/v2";
+// A política vigente: link de versão quebra quando a versão sai do ar.
+const POLITICA_PRIVACIDADE_URL = "https://unumpeople.com.br/privacidade";
 
 export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);

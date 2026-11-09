@@ -2,15 +2,17 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import CookieBanner from './CookieBanner';
 
-// termos-crm-v2: o banner diz só o que o navegador guarda e aponta para a v2 da política.
-describe('CookieBanner — Política de Privacidade v2', () => {
+// termos-crm-v2: o banner diz só o que o navegador guarda. O link vai para a
+// política VIGENTE (/privacidade): link de versão quebra quando versões antigas
+// saem do ar (v2 deu 404 em 11/2026).
+describe('CookieBanner — Política de Privacidade vigente', () => {
   beforeEach(() => window.localStorage.clear());
 
-  it('aponta para a v2 da política', () => {
+  it('aponta para a política vigente', () => {
     render(<CookieBanner />);
     expect(screen.getByRole('link', { name: /Política de Privacidade/i })).toHaveAttribute(
       'href',
-      'https://unumpeople.com.br/termos/5558327c-6ee1-4549-8e1b-dc03fdae516a/v2',
+      'https://unumpeople.com.br/privacidade',
     );
   });
 
