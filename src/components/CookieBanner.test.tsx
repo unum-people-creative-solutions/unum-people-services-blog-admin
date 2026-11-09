@@ -18,7 +18,7 @@ describe('CookieBanner Component', () => {
     render(<CookieBanner />);
     const link = screen.getByRole('link', { name: /Política de Privacidade/i });
     expect(link).toBeInTheDocument();
-    expect(link.getAttribute('href')).toMatch(/^https:\/\/unumpeople\.com\.br\/termos\//);
+    expect(link.getAttribute('href')).toBe('https://unumpeople.com.br/privacidade');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
