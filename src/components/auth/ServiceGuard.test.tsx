@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@testing-library/jest-dom'
 import React from 'react'
@@ -6,7 +6,7 @@ import React from 'react'
 import ServiceGuard from './ServiceGuard'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useTenants } from '@/hooks/useTenants'
-import { blogApi, cobrancaApi, ErroDaApi } from '@/lib/api'
+import { blogApi, cobrancaApi, ErroDaApi, EVENTO_COBRANCA_BLOQUEADA } from '@/lib/api'
 import { comoMock } from '@/test/mocks'
 import type { ResumoDeCobranca } from '@/types/cobranca'
 
@@ -271,6 +271,28 @@ describe('ServiceGuard - bloqueio por fatura em atraso', () => {
     expect(cobrancaApi.resumo).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('Blog Admin Area')).not.toBeInTheDocument()
     expect((erros[0] as ErroDaApi).motivo).toBe('cobranca')
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  // TASK-FIX-B07 (G3): BP-T §3, o 403 de cobrança mostra a tela mesmo que o resumo relido diga outra coisa.
+  it('evento de 403 com motivo "cobranca" mostra a tela mesmo com o resumo relido em dia', async () => {
+    comoMock(cobrancaApi.resumo).mockResolvedValue(resumoEmDia)
+
+    render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+    expect(await screen.findByText('Blog Admin Area')).toBeInTheDocument()
+    await waitFor(() => expect(cobrancaApi.resumo).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(EVENTO_COBRANCA_BLOQUEADA))
+    })
+
+    expect(await screen.findByRole('heading', { level: 1, name: TITULO })).toBeInTheDocument()
+    expect(cobrancaApi.resumo).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('Blog Admin Area')).not.toBeInTheDocument()
     expect(pushMock).not.toHaveBeenCalled()
   })
 
