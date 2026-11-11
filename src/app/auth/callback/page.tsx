@@ -58,6 +58,10 @@ function AuthCallbackContent() {
       setAuth(user, tokens.id_token, [], tokens.refresh_token);
 
       let enabledServices: string[] = [];
+      // Blog com contratada=false: fora do plano ou bloqueado por fatura (Suspenso).
+      // Segue para o app sem o serviço e o ServiceGuard decide entre a tela de
+      // bloqueio e /403 (cobranca-e-plano-do-cliente TASK-FIX-B05).
+      let serviceGuardDecide = false;
       // Só o operador pula /me/acessos (gestao-de-acesso-f5 RF-08).
       if (groups.includes('GlobalAdmin')) {
         enabledServices = ['blog'];
@@ -67,6 +71,7 @@ function AuthCallbackContent() {
           const blog = acessos.ferramentas.find((f) => f.id === 'blog');
           const liberado = blog != null && blog.contratada && blog.permissoes.includes('blog.post.ver');
           enabledServices = liberado ? ['blog'] : [];
+          serviceGuardDecide = blog != null && !blog.contratada;
         } catch (apiErr) {
           // 403: sem vínculo. Outro erro: a API decide depois.
           const status = (apiErr as { status?: number })?.status;
@@ -76,7 +81,7 @@ function AuthCallbackContent() {
 
       setAuth(user, tokens.id_token, enabledServices, tokens.refresh_token);
 
-      if (!enabledServices.includes('blog')) {
+      if (!enabledServices.includes('blog') && !serviceGuardDecide) {
         router.push('/403');
         return;
       }
