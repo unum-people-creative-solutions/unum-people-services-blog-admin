@@ -229,9 +229,15 @@ describe('TelaDeBloqueioCobranca (Blog admin)', () => {
   });
 
   it('parcial (R6): outra fatura em atraso → linha da fatura paga acima do texto', () => {
+    // Antes do parcial, vencida_em = fatura.vencimento e as datas seguem dele (G8 do Verifier F2).
     const anterior: ResumoDeCobranca = {
       ...suspensoGere,
       fatura: { valor: 39.9, vencimento: '2026-10-05', link: 'https://www.asaas.com/i/abc' },
+      vencida_em: '2026-10-05',
+      pagar_ate: '2026-10-14',
+      bloqueio_em: '2026-10-15',
+      fora_do_ar_em: '2026-11-04',
+      cancelamento_em: '2026-12-04',
     };
     const { rerender, recarregar } = montar(anterior);
     fireEvent.click(screen.getByRole('link', { name: /Pagar fatura/ }));

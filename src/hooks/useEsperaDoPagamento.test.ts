@@ -35,9 +35,16 @@ const bloqueadoComOutraFatura: ResumoDeCobranca = {
   ...bloqueado,
   fatura: { valor: 39.9, vencimento: '2026-11-05', link: 'https://www.asaas.com/i/def' },
 };
+// Antes do pagamento parcial, DelinquencySince é o 1º vencimento: vencida_em = fatura.vencimento
+// (cobranca_service.go), e as datas seguem dele (G8 do Verifier F2).
 const bloqueadoAntesDoParcial: ResumoDeCobranca = {
   ...bloqueado,
   fatura: { valor: 39.9, vencimento: '2026-10-05', link: 'https://www.asaas.com/i/abc' },
+  vencida_em: '2026-10-05',
+  pagar_ate: '2026-10-14',
+  bloqueio_em: '2026-10-15',
+  fora_do_ar_em: '2026-11-04',
+  cancelamento_em: '2026-12-04',
 };
 
 let visibilidade: DocumentVisibilityState = 'visible';
