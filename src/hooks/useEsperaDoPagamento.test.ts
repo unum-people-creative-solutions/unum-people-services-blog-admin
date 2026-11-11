@@ -31,21 +31,33 @@ const emDia: ResumoDeCobranca = {
   pode_gerir: true,
 };
 
-// R6: a de 05/10 foi paga e ainda há a de 05/11 em aberto.
-const bloqueadoComOutraFatura: ResumoDeCobranca = {
-  ...bloqueado,
-  fatura: { valor: 39.9, vencimento: '2026-11-05', link: 'https://www.asaas.com/i/def' },
+// R6 com o par real de faturas mensais (TECH-DESIGN, proposta A): 31/01 e 28/02, as duas
+// vencidas no D+29 (01/03). Antes do pagamento parcial, DelinquencySince é o vencimento mais
+// antigo: vencida_em = fatura.vencimento = 31/01 e as datas seguem dele (+0/9/10/30/60).
+const R6_AGORA = new Date('2026-03-01T13:00:00Z').getTime();
+const bloqueadoComDuasVencidas: ResumoDeCobranca = {
+  situacao: 'bloqueado',
+  fatura: { valor: 39.9, vencimento: '2026-01-31', link: 'https://www.asaas.com/i/jan' },
+  vencida_em: '2026-01-31',
+  pagar_ate: '2026-02-09',
+  bloqueio_em: '2026-02-10',
+  fora_do_ar_em: '2026-03-02',
+  cancelamento_em: '2026-04-01',
+  ferramentas_bloqueadas: ['crm', 'blog', 'lp'],
+  pode_gerir: true,
 };
-// Antes do pagamento parcial, DelinquencySince é o 1º vencimento: vencida_em = fatura.vencimento
-// (cobranca_service.go), e as datas seguem dele (G8 do Verifier F2).
-const bloqueadoAntesDoParcial: ResumoDeCobranca = {
-  ...bloqueado,
-  fatura: { valor: 39.9, vencimento: '2026-10-05', link: 'https://www.asaas.com/i/abc' },
-  vencida_em: '2026-10-05',
-  pagar_ate: '2026-10-14',
-  bloqueio_em: '2026-10-15',
-  fora_do_ar_em: '2026-11-04',
-  cancelamento_em: '2026-12-04',
+// Paga a de 31/01: o RF1-20 move DelinquencySince para 28/02 (dias = 1) e a conta volta a
+// INADIMPLENTE: em_atraso, sem ferramentas bloqueadas.
+const emAtrasoComA2802: ResumoDeCobranca = {
+  situacao: 'em_atraso',
+  fatura: { valor: 39.9, vencimento: '2026-02-28', link: 'https://www.asaas.com/i/fev' },
+  vencida_em: '2026-02-28',
+  pagar_ate: '2026-03-09',
+  bloqueio_em: '2026-03-10',
+  fora_do_ar_em: '2026-03-30',
+  cancelamento_em: '2026-04-29',
+  ferramentas_bloqueadas: [],
+  pode_gerir: true,
 };
 
 let visibilidade: DocumentVisibilityState = 'visible';
@@ -197,22 +209,11 @@ describe('useEsperaDoPagamento (Blog admin)', () => {
   // TASK-FIX-B08 (G4): R6 com o Suspenso voltando a Inadimplente. O sinal é o blog
   // sair de ferramentas_bloqueadas (BP-T §5.4), não a situação ficar em dia.
   it('confirmado quando o blog sai de ferramentas_bloqueadas com a conta ainda em atraso (outra fatura em aberto)', () => {
-    const { result, rerender } = montar(bloqueadoAntesDoParcial);
-    act(() => result.current.iniciar('2026-10-05'));
+    vi.setSystemTime(R6_AGORA);
+    const { result, rerender } = montar(bloqueadoComDuasVencidas);
+    act(() => result.current.iniciar('2026-01-31'));
 
-    rerender({
-      resumo: {
-        situacao: 'em_atraso',
-        fatura: { valor: 39.9, vencimento: '2026-11-05', link: 'https://www.asaas.com/i/def' },
-        vencida_em: '2026-11-05',
-        pagar_ate: '2026-11-14',
-        bloqueio_em: '2026-11-15',
-        fora_do_ar_em: '2026-12-05',
-        cancelamento_em: '2027-01-04',
-        ferramentas_bloqueadas: [],
-        pode_gerir: true,
-      },
-    });
+    rerender({ resumo: emAtrasoComA2802 });
 
     expect(result.current.estado).toBe('confirmado');
     expect(sessionStorage.getItem(CHAVE)).toBeNull();
@@ -227,14 +228,18 @@ describe('useEsperaDoPagamento (Blog admin)', () => {
     expect(result.current.estado).toBe('aguardando');
   });
 
-  it('parcial (R6): vencimento diferente do guardado volta ao normal com a fatura paga', () => {
-    const { result, rerender } = montar(bloqueadoAntesDoParcial);
-    act(() => result.current.iniciar('2026-10-05'));
+  // R6 real (31/01 paga, 28/02 ainda em atraso): a conta volta a em_atraso e o blog sai da
+  // lista, então o desfecho na tela do Blog é o confirmado do BP-T §5.4, sem a linha do parcial.
+  // O par antigo (05/10 e 05/11, conta ainda bloqueada) não acontece com fatura mensal.
+  it('R6 real: pagar a de 31/01 com a de 28/02 em atraso dá confirmado, sem a linha do parcial', () => {
+    vi.setSystemTime(R6_AGORA);
+    const { result, rerender } = montar(bloqueadoComDuasVencidas);
+    act(() => result.current.iniciar('2026-01-31'));
 
-    rerender({ resumo: bloqueadoComOutraFatura });
+    rerender({ resumo: emAtrasoComA2802 });
 
-    expect(result.current.estado).toBe('parcial');
-    expect(result.current.vencimentoPago).toBe('2026-10-05');
+    expect(result.current.estado).toBe('confirmado');
+    expect(result.current.vencimentoPago).toBeNull();
     expect(sessionStorage.getItem(CHAVE)).toBeNull();
   });
 

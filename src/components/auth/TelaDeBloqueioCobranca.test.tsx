@@ -228,27 +228,40 @@ describe('TelaDeBloqueioCobranca (Blog admin)', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it('parcial (R6): outra fatura em atraso → linha da fatura paga acima do texto', () => {
-    // Antes do parcial, vencida_em = fatura.vencimento e as datas seguem dele (G8 do Verifier F2).
+  // R6 com o par real de faturas mensais (TECH-DESIGN, proposta A): 31/01 e 28/02, as duas
+  // vencidas no D+29 (01/03). Paga a de 31/01, o RF1-20 move DelinquencySince para 28/02 (dias = 1):
+  // em_atraso, sem ferramentas bloqueadas. Na tela do Blog o desfecho é o confirmado (BP-T §5.4),
+  // sem a linha do parcial. O par antigo (05/10 e 05/11, ainda bloqueada) não acontece.
+  it('R6 real: paga a de 31/01 com a de 28/02 em atraso → "Pagamento confirmado", sem a linha do parcial', () => {
     const anterior: ResumoDeCobranca = {
       ...suspensoGere,
-      fatura: { valor: 39.9, vencimento: '2026-10-05', link: 'https://www.asaas.com/i/abc' },
-      vencida_em: '2026-10-05',
-      pagar_ate: '2026-10-14',
-      bloqueio_em: '2026-10-15',
-      fora_do_ar_em: '2026-11-04',
-      cancelamento_em: '2026-12-04',
+      fatura: { valor: 39.9, vencimento: '2026-01-31', link: 'https://www.asaas.com/i/jan' },
+      vencida_em: '2026-01-31',
+      pagar_ate: '2026-02-09',
+      bloqueio_em: '2026-02-10',
+      fora_do_ar_em: '2026-03-02',
+      cancelamento_em: '2026-04-01',
+    };
+    const depois: ResumoDeCobranca = {
+      situacao: 'em_atraso',
+      fatura: { valor: 39.9, vencimento: '2026-02-28', link: 'https://www.asaas.com/i/fev' },
+      vencida_em: '2026-02-28',
+      pagar_ate: '2026-03-09',
+      bloqueio_em: '2026-03-10',
+      fora_do_ar_em: '2026-03-30',
+      cancelamento_em: '2026-04-29',
+      ferramentas_bloqueadas: [],
+      pode_gerir: true,
     };
     const { rerender, recarregar } = montar(anterior);
     fireEvent.click(screen.getByRole('link', { name: /Pagar fatura/ }));
 
-    rerender(<TelaDeBloqueioCobranca resumo={suspensoGere} tenantId={TENANT} recarregar={recarregar} />);
+    rerender(<TelaDeBloqueioCobranca resumo={depois} tenantId={TENANT} recarregar={recarregar} />);
 
-    expect(
-      screen.getByText('Recebemos o pagamento da fatura de 05/10. Ainda há outra fatura em atraso.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Aguardando a confirmação do pagamento')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 1, name: TITULO })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Pagamento confirmado' })).toHaveFocus();
+    expect(screen.getByText('Seu acesso está liberado.')).toBeInTheDocument();
+    expect(screen.queryByText(/Recebemos o pagamento da fatura de 31\/01/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: TITULO })).not.toBeInTheDocument();
   });
 
   it('10 min sem confirmar: mensagem, "Conferir agora" consulta uma vez e o pagar continua', async () => {
