@@ -90,6 +90,13 @@ export default function ServiceGuard({ children }: { children: React.ReactNode }
   const leituraAtual = leitura && leitura.tenantId === activeTenantId ? leitura : null;
   const telaDeBloqueio = isProtectedRoute && !!activeTenantId && bloqueadoEm === activeTenantId;
 
+  // Avisa o AuthGuard para não pôr o termo pendente por cima da tela (TASK-FIX-B06).
+  const setTelaDeBloqueioCobranca = useAuthStore((estado) => estado.setTelaDeBloqueioCobranca);
+  useEffect(() => {
+    setTelaDeBloqueioCobranca(telaDeBloqueio);
+  }, [telaDeBloqueio, setTelaDeBloqueioCobranca]);
+  useEffect(() => () => setTelaDeBloqueioCobranca(false), [setTelaDeBloqueioCobranca]);
+
   useEffect(() => {
     if (isProtectedRoute && hasHydrated && isAuthenticated) {
       if (tenantsLoaded && tenants.length === 0) {

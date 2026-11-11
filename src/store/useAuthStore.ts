@@ -25,6 +25,10 @@ interface AuthState {
   activeTenantId: string | null;
   activeTenantName: string | null;
   tenantsLoaded: boolean;
+  // Tela de bloqueio por cobrança na tela agora (ServiceGuard); o AuthGuard não põe
+  // o termo pendente por cima dela (cobranca-e-plano-do-cliente TASK-FIX-B06). Não é persistido.
+  telaDeBloqueioCobranca: boolean;
+  setTelaDeBloqueioCobranca: (ativa: boolean) => void;
   setAvailableTenants: (tenants: Tenant[]) => void;
   setActiveTenant: (id: string, name: string) => void;
   setAuth: (user: User, token: string, enabledServices: string[], refreshToken?: string) => void;
@@ -48,6 +52,8 @@ export const useAuthStore = create<AuthState>()(
       activeTenantId: null,
       activeTenantName: null,
       tenantsLoaded: false,
+      telaDeBloqueioCobranca: false,
+      setTelaDeBloqueioCobranca: (ativa) => set({ telaDeBloqueioCobranca: ativa }),
       setAvailableTenants: (tenants) => {
         const state = get();
         // Mapeia `nome_negocio` para `name` se `name` não estiver presente (vem da API Go)
