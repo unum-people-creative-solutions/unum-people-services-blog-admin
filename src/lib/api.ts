@@ -1,5 +1,6 @@
 import { useAuthStore, Tenant } from '@/store/useAuthStore';
 import { redirectToHostedUI } from '@/lib/pkce';
+import type { ResumoDeCobranca } from '@/types/cobranca';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -27,14 +28,20 @@ export interface MeusAcessos {
 export class ErroDaApi extends Error {
   status: number;
   permissao?: string;
+  motivo?: string;
 
-  constructor(message: string, status: number, permissao?: string) {
+  constructor(message: string, status: number, permissao?: string, motivo?: string) {
     super(message);
     this.name = 'ErroDaApi';
     this.status = status;
     this.permissao = permissao;
+    this.motivo = motivo;
   }
 }
+
+// 403 com motivo "cobranca" (conta bloqueada por fatura em atraso): a tela de
+// bloqueio ouve este evento e se mostra no lugar da ferramenta (RF2-61).
+export const EVENTO_COBRANCA_BLOQUEADA = 'unum:cobranca-bloqueada';
 
 export const MENSAGEM_SEM_PERMISSAO = 'Você não tem permissão para fazer isso nesta empresa.';
 
@@ -75,7 +82,11 @@ async function fetchWithAuth(path: string, options: RequestInit = {}) {
     }
     const errData = await response.json().catch(() => ({}));
     const permissao = typeof errData.permissao === 'string' ? errData.permissao : undefined;
-    throw new ErroDaApi(errData.error || `HTTP error! status: ${response.status}`, response.status, permissao);
+    const motivo = typeof errData.motivo === 'string' ? errData.motivo : undefined;
+    if (response.status === 403 && motivo === 'cobranca') {
+      window.dispatchEvent(new CustomEvent(EVENTO_COBRANCA_BLOQUEADA));
+    }
+    throw new ErroDaApi(errData.error || `HTTP error! status: ${response.status}`, response.status, permissao, motivo);
   }
 
   return response.json();
@@ -173,5 +184,10 @@ export const termsApi = {
 
 export const acessosApi = {
   get: (): Promise<MeusAcessos> => fetchWithAuth('/me/acessos'),
+};
+
+// GET /me/cobranca da empresa ativa (X-Tenant-ID por fetchWithAuth), RF2-60.
+export const cobrancaApi = {
+  resumo: (): Promise<ResumoDeCobranca> => fetchWithAuth('/me/cobranca'),
 };
 

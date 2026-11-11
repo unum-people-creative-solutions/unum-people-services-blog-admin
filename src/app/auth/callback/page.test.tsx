@@ -149,7 +149,10 @@ describe('AuthCallbackPage (TASK-FE-BLOG-002)', () => {
     });
   });
 
-  it('Blog não contratado vai para /403', async () => {
+  // cobranca-e-plano-do-cliente TASK-FIX-B05 (G1): contratada=false também é a conta
+  // Suspensa (PodeUsarAreaLogada). O login segue para o app e o ServiceGuard decide:
+  // tela de bloqueio (blog em ferramentas_bloqueadas) ou /403 (blog fora do plano).
+  it('Blog com contratada=false (fora do plano ou Suspenso) segue para /posts sem o serviço e o ServiceGuard decide', async () => {
     window.sessionStorage.setItem('pkce_code_verifier', 'verifier-abc');
     comoMock(useSearchParams).mockReturnValue(makeSearchParams('auth-code-123'));
     comoMock(acessosApi.get).mockResolvedValue(acessosDoBlog(false, REDATOR));
@@ -157,8 +160,29 @@ describe('AuthCallbackPage (TASK-FE-BLOG-002)', () => {
     render(<AuthCallbackPage />);
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/403');
+      expect(mockPush).toHaveBeenCalledWith('/posts');
     });
+    expect(mockPush).not.toHaveBeenCalledWith('/403');
+    expect(mockSetAuth).toHaveBeenLastCalledWith(
+      { email: 'editor@example.com', groups: [] },
+      'id-token-abc',
+      [],
+      'refresh-token-abc'
+    );
+  });
+
+  it('Blog com contratada=false volta para a rota pretendida (returnTo)', async () => {
+    window.sessionStorage.setItem('pkce_code_verifier', 'verifier-abc');
+    window.sessionStorage.setItem('auth_return_to', '/posts/123/edit');
+    comoMock(useSearchParams).mockReturnValue(makeSearchParams('auth-code-123'));
+    comoMock(acessosApi.get).mockResolvedValue(acessosDoBlog(false, []));
+
+    render(<AuthCallbackPage />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/posts/123/edit');
+    });
+    expect(mockPush).not.toHaveBeenCalledWith('/403');
   });
 
   it('leitura dos acessos responde 403 (sem vínculo na empresa) vai para /403', async () => {
