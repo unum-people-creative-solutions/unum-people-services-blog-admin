@@ -296,6 +296,52 @@ describe('ServiceGuard - bloqueio por fatura em atraso', () => {
     expect(pushMock).not.toHaveBeenCalled()
   })
 
+  // DV-14 (revista em 11/11/2026): o operador (grupo GlobalAdmin no token) não vê a tela
+  // de bloqueio e o 403 com motivo "cobranca" não vira bloqueio para ele.
+  describe('operador (GlobalAdmin)', () => {
+    beforeEach(() => {
+      useAuthStore.setState({
+        user: { email: 'operador@unumpeople.com.br', groups: ['GlobalAdmin'] },
+        isAdmin: true,
+        enabledServices: ['blog'],
+      })
+      comoMock(cobrancaApi.resumo).mockResolvedValue(suspenso)
+    })
+
+    it('empresa com o blog bloqueado: mostra o app, sem a tela de bloqueio e sem /403', async () => {
+      render(
+        <ServiceGuard>
+          <main>Blog Admin Area</main>
+        </ServiceGuard>
+      )
+
+      expect(await screen.findByText('Blog Admin Area')).toBeInTheDocument()
+      await new Promise((r) => setTimeout(r, 50))
+      expect(screen.getByText('Blog Admin Area')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: TITULO })).not.toBeInTheDocument()
+      expect(pushMock).not.toHaveBeenCalled()
+    })
+
+    it('403 com motivo "cobranca" não troca o app pela tela de bloqueio', async () => {
+      comoMock(cobrancaApi.resumo).mockResolvedValue(resumoEmDia)
+      render(
+        <ServiceGuard>
+          <main>Blog Admin Area</main>
+        </ServiceGuard>
+      )
+      expect(await screen.findByText('Blog Admin Area')).toBeInTheDocument()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent(EVENTO_COBRANCA_BLOQUEADA))
+      })
+      await new Promise((r) => setTimeout(r, 50))
+
+      expect(screen.getByText('Blog Admin Area')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: TITULO })).not.toBeInTheDocument()
+      expect(pushMock).not.toHaveBeenCalled()
+    })
+  })
+
   it('UI-4: leitura do resumo com erro mostra o app com o aviso, e "Tentar de novo" relê', async () => {
     comoMock(cobrancaApi.resumo)
       .mockRejectedValueOnce(new ErroDaApi('internal_error', 500))

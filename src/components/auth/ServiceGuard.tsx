@@ -26,13 +26,14 @@ const carregando = (
 );
 
 export default function ServiceGuard({ children }: { children: React.ReactNode }) {
-  const { hasBlogService, hasHydrated, isAuthenticated, activeTenantId } = useAuthStore();
+  const { hasBlogService, hasHydrated, isAuthenticated, activeTenantId, isAdmin } = useAuthStore();
   const { tenants, tenantsLoaded } = useTenants();
   const router = useRouter();
   const pathname = usePathname();
   const isProtectedRoute = pathname !== '/403' && pathname !== '/auth/callback';
+  // DV-14 (revista em 11/11/2026): o operador (GlobalAdmin no token) não vê a tela de bloqueio.
   const podeConsultarCobranca =
-    isProtectedRoute && hasHydrated && isAuthenticated && tenantsLoaded && tenants.length > 0 && !!activeTenantId;
+    isProtectedRoute && hasHydrated && isAuthenticated && !isAdmin && tenantsLoaded && tenants.length > 0 && !!activeTenantId;
 
   const [leitura, setLeitura] = useState<Leitura | null>(null);
   // Empresa em que a tela de bloqueio apareceu: fica até recarregar a página ou trocar de empresa.
@@ -79,6 +80,8 @@ export default function ServiceGuard({ children }: { children: React.ReactNode }
   // Segunda barreira: 403 com motivo "cobranca" em qualquer chamada (fetchWithAuth).
   useEffect(() => {
     const aoBloquear = () => {
+      // DV-14: o 403 com motivo "cobranca" não vira bloqueio para o operador.
+      if (useAuthStore.getState().isAdmin) return;
       const tenantId = useAuthStore.getState().activeTenantId;
       if (tenantId) setBloqueadoEm(tenantId);
       reler();
