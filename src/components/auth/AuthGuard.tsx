@@ -7,7 +7,7 @@ import { redirectToHostedUI } from '@/lib/pkce';
 import PendingTermsGate from './PendingTermsGate';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, hasHydrated } = useAuthStore();
+  const { isAuthenticated, hasHydrated, telaDeBloqueioCobranca } = useAuthStore();
   const pathname = usePathname();
   const isProtectedRoute = pathname !== '/403' && pathname !== '/auth/callback';
 
@@ -34,7 +34,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      {isProtectedRoute && hasHydrated && isAuthenticated && <PendingTermsGate />}
+      {/* A tela de bloqueio por cobrança vem primeiro: o termo pendente não a cobre (TASK-FIX-B06). */}
+      {isProtectedRoute && hasHydrated && isAuthenticated && !telaDeBloqueioCobranca && <PendingTermsGate />}
     </>
   );
 }
