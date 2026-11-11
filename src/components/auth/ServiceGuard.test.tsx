@@ -6,7 +6,8 @@ import React from 'react'
 import ServiceGuard from './ServiceGuard'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useTenants } from '@/hooks/useTenants'
-import { blogApi, cobrancaApi, ErroDaApi, EVENTO_COBRANCA_BLOQUEADA } from '@/lib/api'
+import { acessosApi, blogApi, cobrancaApi, ErroDaApi, EVENTO_COBRANCA_BLOQUEADA } from '@/lib/api'
+import type { MeusAcessos } from '@/lib/api'
 import { comoMock } from '@/test/mocks'
 import type { ResumoDeCobranca } from '@/types/cobranca'
 
@@ -38,6 +39,7 @@ const { resumoEmDia } = vi.hoisted(() => {
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   cobrancaApi: { resumo: vi.fn(() => Promise.resolve(resumoEmDia)) },
+  acessosApi: { get: vi.fn(() => Promise.reject(new Error('GET /me/acessos sem resposta definida no teste'))) },
 }))
 
 describe('ServiceGuard', () => {
@@ -215,8 +217,24 @@ describe('ServiceGuard - bloqueio por fatura em atraso', () => {
     expect(pushMock).not.toHaveBeenCalled()
   })
 
+  // GET /me/acessos da empresa ativa (contrato de acessos, AcessoFerramenta).
+  const acessos = (contratada: boolean): MeusAcessos => ({
+    tenant_id: TENANT,
+    operador: false,
+    ferramentas: [
+      {
+        id: 'blog',
+        nome: 'Blog',
+        contratada,
+        papel: { id: 'admin', nome: 'Administrador', sistema: true, implicito: true },
+        permissoes: ['blog.post.ver', 'blog.post.criar'],
+      },
+    ],
+  })
+
   it('/403: sem o serviço no plano continua indo para /403', async () => {
     useAuthStore.setState({ enabledServices: [] })
+    comoMock(acessosApi.get).mockResolvedValue(acessos(false))
 
     render(
       <ServiceGuard>
@@ -227,6 +245,70 @@ describe('ServiceGuard - bloqueio por fatura em atraso', () => {
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/403'))
     expect(screen.queryByText('Blog Admin Area')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: TITULO })).not.toBeInTheDocument()
+  })
+
+  // TASK-FIX-B10 (N1): o login de uma conta Suspensa gravou enabledServices: []. Depois do
+  // pagamento ("Seu acesso está liberado." → "Continuar" recarrega), o resumo vem em dia e o
+  // /me/acessos relido dá o blog contratado: o app abre, sem /403.
+  it('depois do pagamento: com enabledServices vazio do login, relê /me/acessos e, com o blog contratado, abre o app sem /403', async () => {
+    useAuthStore.setState({ enabledServices: [] })
+    comoMock(cobrancaApi.resumo).mockResolvedValue(resumoEmDia)
+    comoMock(acessosApi.get).mockResolvedValue(acessos(true))
+
+    render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+
+    expect(await screen.findByText('Blog Admin Area')).toBeInTheDocument()
+    expect(acessosApi.get).toHaveBeenCalledTimes(1)
+    expect(useAuthStore.getState().enabledServices).toEqual(['blog'])
+    expect(pushMock).not.toHaveBeenCalledWith('/403')
+  })
+
+  it('login Suspenso → tela → pagamento confirmado → "Continuar" (recarga) → app aberto, sem /403', async () => {
+    useAuthStore.setState({ enabledServices: [] })
+    comoMock(cobrancaApi.resumo).mockResolvedValue(suspenso)
+    comoMock(acessosApi.get).mockResolvedValue(acessos(true))
+
+    const antes = render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+    expect(await screen.findByRole('heading', { level: 1, name: TITULO })).toBeInTheDocument()
+    antes.unmount()
+
+    // Recarga: o store persistido continua com enabledServices: [] e a conta já está em dia.
+    comoMock(cobrancaApi.resumo).mockResolvedValue(resumoEmDia)
+    render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+
+    expect(await screen.findByText('Blog Admin Area')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: TITULO })).not.toBeInTheDocument()
+    expect(pushMock).not.toHaveBeenCalledWith('/403')
+  })
+
+  it('releitura de /me/acessos com erro: vai para /403 como hoje e registra o erro', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    useAuthStore.setState({ enabledServices: [] })
+    comoMock(acessosApi.get).mockRejectedValue(new ErroDaApi('internal_error', 500))
+
+    render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/403'))
+    expect(screen.queryByText('Blog Admin Area')).not.toBeInTheDocument()
+    expect(useAuthStore.getState().enabledServices).toEqual([])
+    expect(consoleError).toHaveBeenCalled()
+    consoleError.mockRestore()
   })
 
   it('fetchWithAuth: 403 com motivo "cobranca" numa chamada do app mostra a tela (relendo o resumo)', async () => {

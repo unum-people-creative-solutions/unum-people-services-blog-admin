@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useTenants } from '@/hooks/useTenants';
-import { cobrancaApi, EVENTO_COBRANCA_BLOQUEADA } from '@/lib/api';
+import { acessosApi, cobrancaApi, EVENTO_COBRANCA_BLOQUEADA } from '@/lib/api';
 import type { ResumoDeCobranca } from '@/types/cobranca';
 import TelaDeBloqueioCobranca from './TelaDeBloqueioCobranca';
 
@@ -39,6 +39,10 @@ export default function ServiceGuard({ children }: { children: React.ReactNode }
   // Empresa em que a tela de bloqueio apareceu: fica até recarregar a página ou trocar de empresa.
   const [bloqueadoEm, setBloqueadoEm] = useState<string | null>(null);
   const requisicao = useRef(0);
+  // TASK-FIX-B10 (N1): o enabledServices gravado no login pode estar velho (conta Suspensa que
+  // já pagou). Antes do /403, relê GET /me/acessos da empresa ativa uma vez.
+  const acessosRelidosDe = useRef<string | null>(null);
+  const [semBlogEm, setSemBlogEm] = useState<string | null>(null);
 
   // Lê o resumo da empresa; a resposta de uma leitura anterior (outra empresa) é descartada.
   const lerResumo = useCallback((tenantId: string): Promise<void> => {
@@ -106,12 +110,34 @@ export default function ServiceGuard({ children }: { children: React.ReactNode }
         router.push('/403');
       } else if (!hasBlogService() && !telaDeBloqueio) {
         // Sem o blog no acesso: antes de ir a /403, confere se é bloqueio por fatura (RF2-63).
-        if (tenantsLoaded && (!activeTenantId || leituraAtual !== null)) {
+        if (tenantsLoaded && !activeTenantId) {
           router.push('/403');
+        } else if (tenantsLoaded && activeTenantId && leituraAtual !== null) {
+          if (semBlogEm === activeTenantId) {
+            router.push('/403');
+          } else if (acessosRelidosDe.current !== activeTenantId) {
+            const tenantId = activeTenantId;
+            acessosRelidosDe.current = tenantId;
+            acessosApi.get().then(
+              (acessos) => {
+                if (useAuthStore.getState().activeTenantId !== tenantId) return;
+                const blog = acessos.ferramentas.find((f) => f.id === 'blog');
+                if (blog != null && blog.contratada && blog.permissoes.includes('blog.post.ver')) {
+                  useAuthStore.setState({ enabledServices: ['blog'] });
+                } else {
+                  setSemBlogEm(tenantId);
+                }
+              },
+              (erro: unknown) => {
+                console.error('Erro ao reler /me/acessos antes do /403:', erro);
+                setSemBlogEm(tenantId);
+              },
+            );
+          }
         }
       }
     }
-  }, [hasBlogService, isAuthenticated, router, isProtectedRoute, hasHydrated, tenantsLoaded, tenants, telaDeBloqueio, activeTenantId, leituraAtual]);
+  }, [hasBlogService, isAuthenticated, router, isProtectedRoute, hasHydrated, tenantsLoaded, tenants, telaDeBloqueio, activeTenantId, leituraAtual, semBlogEm]);
 
   const avisoDeLeitura = (
     <div
