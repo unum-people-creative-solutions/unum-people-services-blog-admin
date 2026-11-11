@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEsperaDoPagamento } from './useEsperaDoPagamento';
@@ -263,6 +264,24 @@ describe('useEsperaDoPagamento (Blog admin)', () => {
     expect(result.current.estado).toBe('aguardando');
     await avancar(1);
     expect(result.current.estado).toBe('sem_confirmacao');
+  });
+
+  it('RF2-33a: recarregar com a espera iniciada há 10 min ou mais → "sem_confirmacao" já na montagem, chave apagada e sem consultas por intervalo', async () => {
+    sessionStorage.setItem(CHAVE, JSON.stringify({ clicado_em: AGORA - 10 * 60_000, vencimento: '2026-11-05' }));
+    const recarregar = vi.fn().mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useEsperaDoPagamento(TENANT, bloqueado, recarregar), { wrapper: StrictMode });
+
+    expect(result.current.estado).toBe('sem_confirmacao');
+    await avancar(60_000);
+    expect(result.current.estado).toBe('sem_confirmacao');
+    expect(sessionStorage.getItem(CHAVE)).toBeNull();
+    expect(recarregar).not.toHaveBeenCalled();
+
+    // "Conferir agora" continua: uma consulta.
+    act(() => result.current.conferirAgora());
+    await avancar(0);
+    expect(recarregar).toHaveBeenCalledTimes(1);
   });
 
   it('a chave de outra empresa não retoma a espera', () => {

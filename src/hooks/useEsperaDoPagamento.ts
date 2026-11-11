@@ -39,7 +39,12 @@ export function useEsperaDoPagamento(
 ) {
   const [tenantDaEspera, setTenantDaEspera] = useState(tenantId);
   const [espera, setEspera] = useState<Espera | null>(() => lerEspera(tenantId));
-  const [estado, setEstado] = useState<EstadoDaEspera>(() => (lerEspera(tenantId) ? 'aguardando' : 'parado'));
+  // RF2-33a: recarregar com a espera de 10 min ou mais já mostra o desfecho dos 10 min.
+  const [estado, setEstado] = useState<EstadoDaEspera>(() => {
+    const guardada = lerEspera(tenantId);
+    if (!guardada) return 'parado';
+    return Date.now() - guardada.clicado_em < LIMITE_MS ? 'aguardando' : 'sem_confirmacao';
+  });
   const [falhou, setFalhou] = useState(false);
   const [vencimentoPago, setVencimentoPago] = useState<string | null>(null);
   const [resumoVisto, setResumoVisto] = useState(resumo);

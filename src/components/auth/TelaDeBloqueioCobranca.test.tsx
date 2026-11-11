@@ -273,6 +273,28 @@ describe('TelaDeBloqueioCobranca (Blog admin)', () => {
     expect(recarregar).toHaveBeenCalledTimes(antes + 1);
   });
 
+  it('RF2-33a: recarregar com a espera de 10 min ou mais → "Ainda não recebemos…" na região viva desde a montagem, "Conferir agora" e "Pagar fatura", sem consultas por intervalo', async () => {
+    vi.useFakeTimers();
+    sessionStorage.setItem(
+      `cobranca-aguardando:${TENANT}`,
+      JSON.stringify({ clicado_em: Date.now() - 10 * 60_000, vencimento: '2026-11-05' }),
+    );
+    const { recarregar } = montar(suspensoGere);
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Ainda não recebemos a confirmação. Pix e cartão confirmam em poucos minutos. Boleto leva até 3 dias úteis. O acesso volta sozinho quando o pagamento for confirmado.',
+    );
+    expect(screen.queryByText('Aguardando a confirmação do pagamento')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Pagar fatura/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Conferir agora' })).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(recarregar).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(`cobranca-aguardando:${TENANT}`)).toBeNull();
+  });
+
   it('três consultas seguidas com falha: alerta com "Conferir agora"', async () => {
     vi.useFakeTimers();
     montar(suspensoGere, vi.fn().mockRejectedValue(new Error('rede')));
