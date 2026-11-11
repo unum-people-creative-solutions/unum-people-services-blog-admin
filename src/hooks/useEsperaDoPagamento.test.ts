@@ -186,6 +186,30 @@ describe('useEsperaDoPagamento (Blog admin)', () => {
     expect(sessionStorage.getItem(CHAVE)).toBeNull();
   });
 
+  // TASK-FIX-B08 (G4): R6 com o Suspenso voltando a Inadimplente. O sinal é o blog
+  // sair de ferramentas_bloqueadas (BP-T §5.4), não a situação ficar em dia.
+  it('confirmado quando o blog sai de ferramentas_bloqueadas com a conta ainda em atraso (outra fatura em aberto)', () => {
+    const { result, rerender } = montar(bloqueadoAntesDoParcial);
+    act(() => result.current.iniciar('2026-10-05'));
+
+    rerender({
+      resumo: {
+        situacao: 'em_atraso',
+        fatura: { valor: 39.9, vencimento: '2026-11-05', link: 'https://www.asaas.com/i/def' },
+        vencida_em: '2026-11-05',
+        pagar_ate: '2026-11-14',
+        bloqueio_em: '2026-11-15',
+        fora_do_ar_em: '2026-12-05',
+        cancelamento_em: '2027-01-04',
+        ferramentas_bloqueadas: [],
+        pode_gerir: true,
+      },
+    });
+
+    expect(result.current.estado).toBe('confirmado');
+    expect(sessionStorage.getItem(CHAVE)).toBeNull();
+  });
+
   it('continua bloqueado com o mesmo vencimento: segue aguardando', () => {
     const { result, rerender } = montar();
     act(() => result.current.iniciar('2026-11-05'));
