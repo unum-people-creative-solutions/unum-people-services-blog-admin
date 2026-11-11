@@ -264,6 +264,38 @@ describe('TelaDeBloqueioCobranca (Blog admin)', () => {
     expect(screen.queryByRole('heading', { name: TITULO })).not.toBeInTheDocument();
   });
 
+  // TASK-FIX-B12c (RF2-33b): o ramo "parcial" fica como defesa e não é removido.
+  // DEFESA, INALCANÇÁVEL COM CICLO MENSAL: a API não devolve "blog ainda bloqueado com outro
+  // vencimento" depois de pagar a fatura mais antiga (o par real dá o confirmado, teste acima).
+  // O resumo "depois" é sintético, feito só para acionar o ramo.
+  it('defesa (RF2-33b, inalcançável com ciclo mensal): blog ainda bloqueado com a fatura de 28/02 → "Recebemos o pagamento da fatura de 31/01. Ainda há outra fatura em atraso."', () => {
+    const anterior: ResumoDeCobranca = {
+      ...suspensoGere,
+      fatura: { valor: 39.9, vencimento: '2026-01-31', link: 'https://www.asaas.com/i/jan' },
+      vencida_em: '2026-01-31',
+      pagar_ate: '2026-02-09',
+      bloqueio_em: '2026-02-10',
+      fora_do_ar_em: '2026-03-02',
+      cancelamento_em: '2026-04-01',
+    };
+    const sinteticoAindaBloqueadoComOutraFatura: ResumoDeCobranca = {
+      ...anterior,
+      fatura: { valor: 39.9, vencimento: '2026-02-28', link: 'https://www.asaas.com/i/fev' },
+    };
+    const { rerender, recarregar } = montar(anterior);
+    fireEvent.click(screen.getByRole('link', { name: /Pagar fatura/ }));
+
+    rerender(
+      <TelaDeBloqueioCobranca resumo={sinteticoAindaBloqueadoComOutraFatura} tenantId={TENANT} recarregar={recarregar} />,
+    );
+
+    expect(
+      screen.getByText('Recebemos o pagamento da fatura de 31/01. Ainda há outra fatura em atraso.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: TITULO })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Pagamento confirmado' })).not.toBeInTheDocument();
+  });
+
   it('10 min sem confirmar: mensagem, "Conferir agora" consulta uma vez e o pagar continua', async () => {
     vi.useFakeTimers();
     const { recarregar } = montar(suspensoGere);

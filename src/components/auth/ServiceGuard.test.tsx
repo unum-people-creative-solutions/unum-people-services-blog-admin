@@ -311,6 +311,91 @@ describe('ServiceGuard - bloqueio por fatura em atraso', () => {
     consoleError.mockRestore()
   })
 
+  // TASK-FIX-B12a (B20): a releitura só libera com contratada E blog.post.ver, como o callback.
+  // Membro com papel sem blog.post.ver, conta já em dia: continua sem o app.
+  it('releitura: blog contratado, mas o papel sem blog.post.ver → /403, sem liberar o app', async () => {
+    useAuthStore.setState({ enabledServices: [] })
+    const semVerPosts: MeusAcessos = {
+      tenant_id: TENANT,
+      operador: false,
+      ferramentas: [
+        {
+          id: 'blog',
+          nome: 'Blog',
+          contratada: true,
+          papel: { id: 'membro', nome: 'Membro', sistema: true, implicito: false },
+          permissoes: [],
+        },
+      ],
+    }
+    comoMock(acessosApi.get).mockResolvedValue(semVerPosts)
+
+    render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/403'))
+    expect(acessosApi.get).toHaveBeenCalledTimes(1)
+    expect(useAuthStore.getState().enabledServices).toEqual([])
+    expect(screen.queryByText('Blog Admin Area')).not.toBeInTheDocument()
+  })
+
+  // TASK-FIX-B12b (B21): a resposta de /me/acessos de X que chega depois da troca para Z
+  // (sem o blog no plano) é descartada: não libera o app na empresa errada.
+  it('releitura: resposta atrasada da empresa anterior (com o blog) é descartada depois de trocar para outra sem o blog → /403', async () => {
+    const OUTRA = 'outra-empresa'
+    useAuthStore.setState({
+      enabledServices: [],
+      availableTenants: [
+        { id: TENANT, name: 'Padaria Zé' },
+        { id: OUTRA, name: 'Doceria Zé' },
+      ],
+    })
+    vi.mocked(useTenants).mockReturnValue({
+      tenants: [
+        { id: TENANT, name: 'Padaria Zé' },
+        { id: OUTRA, name: 'Doceria Zé' },
+      ],
+      isLoading: false,
+      tenantsLoaded: true,
+    })
+    let responderX: (a: MeusAcessos) => void = () => undefined
+    const acessosDeX = new Promise<MeusAcessos>((resolve) => {
+      responderX = resolve
+    })
+    let responderZ: (a: MeusAcessos) => void = () => undefined
+    const acessosDeZ = new Promise<MeusAcessos>((resolve) => {
+      responderZ = resolve
+    })
+    comoMock(acessosApi.get).mockReturnValueOnce(acessosDeX).mockReturnValueOnce(acessosDeZ)
+
+    render(
+      <ServiceGuard>
+        <main>Blog Admin Area</main>
+      </ServiceGuard>
+    )
+    await waitFor(() => expect(acessosApi.get).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      useAuthStore.getState().setActiveTenant(OUTRA, 'Doceria Zé')
+    })
+    await waitFor(() => expect(acessosApi.get).toHaveBeenCalledTimes(2))
+
+    // X (com o blog) responde atrasada, com Z já ativa.
+    await act(async () => {
+      responderX(acessos(true))
+    })
+    await act(async () => {
+      responderZ({ ...acessos(false), tenant_id: OUTRA })
+    })
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/403'))
+    expect(useAuthStore.getState().enabledServices).toEqual([])
+    expect(screen.queryByText('Blog Admin Area')).not.toBeInTheDocument()
+  })
+
   it('fetchWithAuth: 403 com motivo "cobranca" numa chamada do app mostra a tela (relendo o resumo)', async () => {
     vi.stubGlobal(
       'fetch',

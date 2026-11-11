@@ -243,6 +243,26 @@ describe('useEsperaDoPagamento (Blog admin)', () => {
     expect(sessionStorage.getItem(CHAVE)).toBeNull();
   });
 
+  // TASK-FIX-B12c (RF2-33b): o ramo "parcial" fica como defesa e não é removido.
+  // DEFESA, INALCANÇÁVEL COM CICLO MENSAL: a API não devolve "blog ainda bloqueado com outro
+  // vencimento" depois de pagar a fatura mais antiga (o par real dá em_atraso sem ferramentas
+  // bloqueadas, teste acima). O resumo "depois" é sintético, feito só para acionar o ramo.
+  it('defesa (RF2-33b, inalcançável com ciclo mensal): blog ainda bloqueado com a fatura de 28/02 → "parcial" com o vencimento pago 31/01', () => {
+    vi.setSystemTime(R6_AGORA);
+    const { result, rerender } = montar(bloqueadoComDuasVencidas);
+    act(() => result.current.iniciar('2026-01-31'));
+
+    const sinteticoAindaBloqueadoComOutraFatura: ResumoDeCobranca = {
+      ...bloqueadoComDuasVencidas,
+      fatura: { valor: 39.9, vencimento: '2026-02-28', link: 'https://www.asaas.com/i/fev' },
+    };
+    rerender({ resumo: sinteticoAindaBloqueadoComOutraFatura });
+
+    expect(result.current.estado).toBe('parcial');
+    expect(result.current.vencimentoPago).toBe('2026-01-31');
+    expect(sessionStorage.getItem(CHAVE)).toBeNull();
+  });
+
   it('três consultas seguidas com falha marcam falhou; uma consulta boa limpa', async () => {
     const recarregar = vi.fn().mockRejectedValue(new Error('rede'));
     const { result } = montar(bloqueado, recarregar);
